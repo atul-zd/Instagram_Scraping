@@ -1,0 +1,7 @@
+# Environment variables and credentials
+.env
+# Generated files and reports
+generated_files/
+
+# Virtual environments
+myenv/
