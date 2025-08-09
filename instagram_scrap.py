@@ -14,15 +14,16 @@ from openpyxl.styles import Alignment
 load_dotenv()
 
 # Set up logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 # Initialize Instaloader
 L = instaloader.Instaloader(
-    download_comments=False, 
-    download_video_thumbnails=False,
-    download_geotags=False
+    download_comments=False, download_video_thumbnails=False, download_geotags=False
 )
+
 
 def login_to_instagram(username=None, password=None):
     username = username or os.getenv("INSTAGRAM_USERNAME")
@@ -48,8 +49,6 @@ def login_to_instagram(username=None, password=None):
             return False
 
 
-
-
 def scrape_account_data(username, max_posts=100, delay_between_posts=3):
     """Scrape Instagram account data with improved error handling and rate limiting"""
     try:
@@ -61,23 +60,23 @@ def scrape_account_data(username, max_posts=100, delay_between_posts=3):
 
     # Account information
     data = {
-        'Instagram ID': profile.userid,
-        'Username': profile.username,
-        'Full Name': profile.full_name,
-        'Followers': profile.followers,
-        'Following': profile.followees,
-        'Posts Count': profile.mediacount,
-        'Bio': profile.biography,
-        'External URL': profile.external_url,
-        'Private': profile.is_private,
-        'Verified': profile.is_verified,
+        "Instagram ID": profile.userid,
+        "Username": profile.username,
+        "Full Name": profile.full_name,
+        "Followers": profile.followers,
+        "Following": profile.followees,
+        "Posts Count": profile.mediacount,
+        "Bio": profile.biography,
+        "External URL": profile.external_url,
+        "Private": profile.is_private,
+        "Verified": profile.is_verified,
     }
 
     logger.info(f"Fetching posts for {username} (max: {max_posts})...")
 
     posts_data = []
     count = 0
-    
+
     try:
         for post in profile.get_posts():
             if count >= max_posts:
@@ -90,41 +89,46 @@ def scrape_account_data(username, max_posts=100, delay_between_posts=3):
                     if post.location:
                         location_name = post.location.name
                 except Exception as e:
-                    logger.debug(f"Could not fetch location for post {post.shortcode}: {e}")
+                    logger.debug(
+                        f"Could not fetch location for post {post.shortcode}: {e}"
+                    )
                     location_name = ""
 
                 # Extract hashtags safely
                 hashtags = []
                 if post.caption:
                     try:
-                        hashtags = [tag for tag in post.caption.split() if tag.startswith('#')]
+                        hashtags = [
+                            tag for tag in post.caption.split() if tag.startswith("#")
+                        ]
                     except Exception as e:
-                        logger.debug(f"Could not extract hashtags for post {post.shortcode}: {e}")
+                        logger.debug(
+                            f"Could not extract hashtags for post {post.shortcode}: {e}"
+                        )
 
                 post_info = {
-                    'Instagram username': profile.username,
-                    'Post URL': f"https://www.instagram.com/p/{post.shortcode}/",
-                    'Caption': post.caption or "",
-                    'Likes': post.likes,
-                    'Comments Count': post.comments,
-                    'Date': post.date_utc.strftime('%Y-%m-%d %H:%M:%S'),
-                    'Is Video': post.is_video,
-                    'Location': location_name,
-                    'Hashtags': hashtags,
+                    "Instagram username": profile.username,
+                    "Post URL": f"https://www.instagram.com/p/{post.shortcode}/",
+                    "Caption": post.caption or "",
+                    "Likes": post.likes,
+                    "Comments Count": post.comments,
+                    "Date": post.date_utc.strftime("%Y-%m-%d %H:%M:%S"),
+                    "Is Video": post.is_video,
+                    "Location": location_name,
+                    "Hashtags": hashtags,
                 }
-
 
                 posts_data.append(post_info)
                 count += 1
-                
+
                 if count % 10 == 0:
                     logger.info(f"Processed {count} posts...")
-                
+
                 time.sleep(delay_between_posts)  # Rate limiting
-                
+
             except Exception as e:
                 logger.error(f"Unexpected error: {e}")
-                
+
     except Exception as e:
         logger.error(f"Error fetching posts: {e}")
 
@@ -132,26 +136,31 @@ def scrape_account_data(username, max_posts=100, delay_between_posts=3):
     return data, posts_data
 
 
-
 def export_to_excel(all_accounts_data, all_posts_data_by_user, filename=None):
-    """Export multiple users' data to Excel with custom column width and text wrapping."""
+    """Export data like the second script: one Profile Info sheet + one Posts sheet per user."""
+
     if not filename:
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        filename = f'generated_files/instagram_report_{timestamp}.xlsx'
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"generated_files/instagram_report_{timestamp}.xlsx"
 
     try:
-        with pd.ExcelWriter(filename, engine='openpyxl') as writer:
-            # Combine all account info into a single sheet
-            account_df = pd.DataFrame(all_accounts_data)
-            account_df.to_excel(writer, sheet_name='Profile Info', index=False)
+        # Debug log: show how many posts per user
+        logger.info(f"Posts data collected: { {u: len(p) for u, p in all_posts_data_by_user.items()} }")
 
-            # Add each user's posts/comments to a separate sheet
-            for username, posts_data in all_posts_data_by_user.items():
-                sheet_name = f"{username}_Posts"
-                sheet_name = sheet_name[:31]
+        with pd.ExcelWriter(filename, engine="openpyxl") as writer:
+            # Combine all account info into one sheet
+            account_df = pd.DataFrame(all_accounts_data)
+            account_df.to_excel(writer, sheet_name="Profile Info", index=False)
+
+            # Always create a posts sheet for each user
+            for account in all_accounts_data:
+                username = account["Username"]
+                sheet_name = f"{username}_Posts"[:31]  # Excel limit is 31 chars
+                posts_data = all_posts_data_by_user.get(username, [])
                 posts_df = pd.DataFrame(posts_data)
                 posts_df.to_excel(writer, sheet_name=sheet_name, index=False)
 
+        # Format column width and wrap text
         wb = openpyxl.load_workbook(filename)
         for ws in wb.worksheets:
             for col in ws.columns:
@@ -169,16 +178,28 @@ def export_to_excel(all_accounts_data, all_posts_data_by_user, filename=None):
         return None
 
 
+
+
 def main():
     """Main function to run the scraper for multiple users"""
+
     # Login
     login_success = login_to_instagram()
 
-    # List of usernames to scrape
-    # target_usernames = ["nasa", "nike", "cristiano", "selenagomez", "adidas", "virat.kohli", "kimkardashian", "therock", "kyliejenner", "9gag"]
-    target_usernames = ["nasa", "nike"]
-    max_posts = 5
-    delay_between_posts = 5
+    # Get environment variables
+    target_usernames_raw = os.getenv("TARGET_USERNAMES")
+    if not target_usernames_raw:
+        logger.error("TARGET_USERNAMES is not set in .env")
+        return
+
+    target_usernames = [u.strip() for u in target_usernames_raw.split(",")]
+
+    try:
+        max_posts = int(os.getenv("MAX_POSTS", "10"))
+        delay_between_posts = int(os.getenv("DELAY_BETWEEN_POSTS", "3"))
+    except ValueError:
+        logger.error("MAX_POSTS and DELAY_BETWEEN_POSTS must be integers")
+        return
 
     all_accounts_data = []
     all_posts_data_by_user = {}
@@ -186,9 +207,7 @@ def main():
     for username in target_usernames:
         logger.info(f"Starting scrape for {username}")
         account_data, posts_data = scrape_account_data(
-            username,
-            max_posts=max_posts,
-            delay_between_posts=delay_between_posts
+            username, max_posts=max_posts, delay_between_posts=delay_between_posts
         )
 
         if account_data:
